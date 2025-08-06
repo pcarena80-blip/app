@@ -1,0 +1,411 @@
+document.addEventListener('DOMContentLoaded', () => {
+  
+  const loggedInUser = JSON.parse(sessionStorage.getItem('loggedInUser'));
+  if (!loggedInUser) {
+    window.location.href = 'login.html';
+    return;
+  }
+
+  const modulesData = {
+    "modules": [
+      {
+        "id": "dashboard", "name": "Dashboard", "icon": "bi-speedometer2",
+        "subSections": [{ "id": "overview", "name": "Overview" }, { "id": "reports", "name": "Reports" }, { "id": "analytics", "name": "Analytics" }]
+      },
+      {
+        "id": "chat", "name": "Team Chat", "icon": "bi-people-fill",
+        "subSections": [{ "id": "general-chat", "name": "General Chat" }]
+      },
+      {
+        "id": "Private Chat", "name": "Chat", "icon": "bi bi-chat",
+        "subSections": [{ "id": "user-management", "name": "User Management" }, { "id": "integrations", "name": "Integrations" }, { "id": "preferences", "name": "Preferences" }]
+      },
+      
+      {
+        "id": "Activity", "name": "Activity", "icon": "bi bi-activity",
+        "subSections": [{ "id": "All Activity", "name": "All Activity" }, { "id": " Filter Activity", "name": " Filter Activity" }, { "id": "Mark as Read/Unread", "name": "Mark as Read/Unread" }]
+      },
+      {
+        "id": "deals", "name": "Deals", "icon": "bi-cash-stack",
+        "subSections": [{ "id": "active-deals", "name": "Active Deals" }, { "id": "closed-deals", "name": "Closed Deals" }, { "id": "pipeline-view", "name": "Pipeline View" }]
+      },
+      {
+        "id": "tasks", "name": "Tasks", "icon": "bi-check2-square",
+        "subSections": [{ "id": "my-tasks", "name": "My Tasks" }, { "id": "team-tasks", "name": "Team Tasks" }, { "id": "calendar", "name": "Calendar" }]
+      },
+      {
+        "id": "campaigns", "name": "Campaigns", "icon": "bi-megaphone-fill",
+        "subSections": [{ "id": "active-campaigns", "name": "Active Campaigns" }, { "id": "past-campaigns", "name": "Past Campaigns" }]
+      },
+      {
+        "id": "support", "name": "Support", "icon": "bi-headset",
+        "subSections": [{ "id": "open-tickets", "name": "Open Tickets" }, { "id": "knowledge-base", "name": "Knowledge Base" }]
+      },
+      {
+        "id": "customers", "name": "Customers", "icon": "bi bi-telephone",
+        "subSections": [{ "id": "all-customers", "name": "All Customers" }, { "id": "leads", "name": "Leads" }, { "id": "accounts", "name": "Accounts" }]
+      },
+      {
+        "id": "settings", "name": "Settings", "icon": "bi-gear-fill",
+        "subSections": [ { "id": "integrations", "name": "Integrations" }, { "id": "preferences", "name": "Preferences" },{ "id": "user-management", "name": "User Management" }]
+      },
+      
+    ]
+  };
+
+  const state = { activeModuleIcon: null, activeSubSectionItem: null };
+  const userManagementModal = new bootstrap.Modal(document.getElementById('userManagementModal'));
+
+  const el = {
+    miniSidebar: document.getElementById("miniSidebar"),
+    subSidebar: document.getElementById("subSidebar"),
+    subList: document.getElementById("subList"),
+    searchInput: document.getElementById("searchInput"),
+    expandBtn: document.getElementById("expandBtn"),
+    mainContent: document.getElementById("mainContent"),
+    dragHandle: document.getElementById("dragHandle"),
+    dataDisplay: document.getElementById("dataDisplay"),
+    mainContentHeader: document.getElementById("mainContentHeader"),
+    userName: document.getElementById("userName"),
+    logoutBtn: document.getElementById("logoutBtn"),
+    appContainer: document.getElementById('app-container'),
+    toastContainer: document.querySelector('.toast-container')
+  };
+
+  const showToast = (message, type = 'success') => {
+    const toastId = `toast-${Date.now()}`;
+    const toastHTML = `
+      <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>`;
+    el.toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+  };
+
+  const renderIcons = (filter = "") => {
+    el.miniSidebar.innerHTML = "";
+    modulesData.modules.forEach(module => {
+      if (module.name.toLowerCase().includes(filter) || module.subSections.some(s => s.name.toLowerCase().includes(filter))) {
+        const iconDiv = document.createElement("div");
+        iconDiv.className = 'icon-wrapper';
+        iconDiv.innerHTML = `<i class="bi ${module.icon} fs-4"></i>`;
+        iconDiv.title = module.name;
+        iconDiv.addEventListener("click", () => {
+          if (state.activeModuleIcon) state.activeModuleIcon.classList.remove('active');
+          iconDiv.classList.add('active');
+          state.activeModuleIcon = iconDiv;
+          loadSubSections(module);
+        });
+        el.miniSidebar.appendChild(iconDiv);
+      }
+    });
+  };
+
+  const loadSubSections = (module) => {
+    el.subSidebar.querySelector("h6").textContent = module.name;
+    el.subList.innerHTML = "";
+    el.mainContentHeader.textContent = module.name;
+
+    module.subSections.forEach((sub, index) => {
+      const li = document.createElement("li");
+      li.className = "list-group-item list-group-item-action";
+      li.textContent = sub.name;
+      li.addEventListener("click", () => {
+        if (state.activeSubSectionItem) state.activeSubSectionItem.classList.remove('active');
+        li.classList.add('active');
+        state.activeSubSectionItem = li;
+        renderContent(module, sub);
+      });
+      el.subList.appendChild(li);
+      if (index === 0) li.click();
+    });
+  };
+
+  const renderContent = (module, sub) => {
+    el.mainContentHeader.textContent = `${module.name} → ${sub.name}`;
+    el.dataDisplay.className = 'p-4';
+
+    switch (sub.id) {
+      case 'user-management':
+        renderUserManagement();
+        break;
+      case 'general-chat':
+        renderChatInterface();
+        break;
+      default:
+        renderGenericContent(module, sub);
+    }
+  };
+
+  const renderGenericContent = (module, sub) => {
+    el.dataDisplay.innerHTML = `
+      <h3>${sub.name}</h3>
+      <p>Data for <strong>${module.name} → ${sub.name}</strong> will be displayed here.</p>
+      <p class="text-muted">This is a placeholder for the ${sub.id} section.</p>
+    `;
+  };
+
+  function renderUserTable(users, filter = "") {
+    const userTableContainer = document.getElementById('userTableContainer');
+    const filteredUsers = users.filter(user =>
+      user.username.toLowerCase().includes(filter) ||
+      user.email.toLowerCase().includes(filter)
+    );
+    userTableContainer.innerHTML = `
+      <table class="table table-hover">
+        <thead><tr><th>Username</th><th>Email</th><th>Action</th></tr></thead>
+        <tbody>
+          ${filteredUsers.length
+            ? filteredUsers.map(user => `
+              <tr>
+                <td>${user.username}</td>
+                <td>${user.email}</td>
+                <td>
+                  ${user.email !== loggedInUser.email
+                    ? `<button class="btn btn-sm btn-primary start-chat-btn" data-email="${user.email}" data-username="${user.username}">Chat</button>`
+                    : `<span class="text-muted">You</span>`
+                  }
+                </td>
+              </tr>
+            `).join('')
+            : `<tr><td colspan="3" class="text-center text-muted">No users found.</td></tr>`
+          }
+        </tbody>
+      </table>
+    `;
+
+    document.querySelectorAll('.start-chat-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const otherUser = {
+          email: this.getAttribute('data-email'),
+          username: this.getAttribute('data-username')
+        };
+        openPrivateChat(otherUser);
+      });
+    });
+  }
+
+  const renderUserManagement = () => {
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const modalBody = document.getElementById('userManagementModalBody');
+    modalBody.innerHTML = `
+      <input type="text" id="userSearchInput" class="form-control mb-3" placeholder="Search users by name or email...">
+      <div id="userTableContainer"></div>
+    `;
+    renderUserTable(users);
+
+    document.getElementById('userSearchInput').addEventListener('input', function() {
+      renderUserTable(users, this.value.toLowerCase());
+    });
+
+    userManagementModal.show();
+    renderGenericContent({name: "Settings"}, {name: "User Management", id: "user-management"});
+  };
+
+  function openPrivateChat(otherUser) {
+    el.dataDisplay.innerHTML = `
+      <div class="private-chat-container">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-person-circle fs-3 me-2"></i>
+          <h5 class="mb-0">${otherUser.username} <span class="badge bg-secondary ms-2">Private Chat</span></h5>
+        </div>
+        <div class="private-chat-messages border rounded p-2 mb-2" id="private-chat-messages" style="height:250px;overflow-y:auto;background:#f8f9fa"></div>
+        <form id="private-chat-form" class="d-flex">
+          <input type="text" id="private-chat-input" class="form-control me-2" placeholder="Type a message..." autocomplete="off">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
+        </form>
+        <button class="btn btn-link mt-2" id="back-to-users">&larr; Back to Users</button>
+      </div>
+    `;
+
+    loadPrivateChatMessages(otherUser);
+
+    document.getElementById('private-chat-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      sendPrivateChatMessage(otherUser);
+    });
+
+    document.getElementById('back-to-users').addEventListener('click', function() {
+      renderUserManagement();
+    });
+  }
+
+  function getChatKey(user1, user2) {
+    return 'privateChat_' + [user1.email, user2.email].sort().join('_');
+  }
+
+  function loadPrivateChatMessages(otherUser) {
+    const chatKey = getChatKey(loggedInUser, otherUser);
+    const messages = JSON.parse(localStorage.getItem(chatKey)) || [];
+    const messagesContainer = document.getElementById('private-chat-messages');
+    if (!messages.length) {
+      messagesContainer.innerHTML = `<div class="text-center text-muted p-3">No messages yet.</div>`;
+      return;
+    }
+    messagesContainer.innerHTML = messages.map(msg => {
+      const isSent = msg.email === loggedInUser.email;
+      const msgClass = isSent ? 'sent text-end' : 'received text-start';
+      const userDisplay = isSent ? 'You' : otherUser.username;
+      const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `
+        <div class="mb-2 ${msgClass}">
+          <div class="small text-muted">${userDisplay} <span class="fw-normal opacity-75">${time}</span></div>
+          <div class="d-inline-block px-3 py-2 rounded ${isSent ? 'bg-primary text-white' : 'bg-light text-dark'}">${msg.text}</div>
+        </div>
+      `;
+    }).join('');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  function sendPrivateChatMessage(otherUser) {
+    const input = document.getElementById('private-chat-input');
+    if (input.value.trim()) {
+      const chatKey = getChatKey(loggedInUser, otherUser);
+      const messages = JSON.parse(localStorage.getItem(chatKey)) || [];
+      messages.push({
+        username: loggedInUser.username,
+        email: loggedInUser.email,
+        text: input.value.trim(),
+        timestamp: new Date().toISOString()
+      });
+      localStorage.setItem(chatKey, JSON.stringify(messages));
+      loadPrivateChatMessages(otherUser);
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  const renderChatInterface = () => {
+    el.dataDisplay.innerHTML = `
+      <div class="chat-container">
+        <div class="chat-messages" id="chat-messages"></div>
+        <form class="chat-input-form" id="chat-form">
+          <input type="text" id="chat-input" class="form-control" placeholder="Type a message..." autocomplete="off">
+          <button type="submit" class="btn btn-primary ms-2"><i class="bi bi-send-fill"></i></button>
+        </form>
+      </div>`;
+    el.dataDisplay.className = '';
+    document.getElementById('chat-form').addEventListener('submit', sendChatMessage);
+    loadChatMessages();
+  };
+
+  const loadChatMessages = () => {
+    const messagesContainer = document.getElementById('chat-messages');
+    if (!messagesContainer) return;
+    const messages = JSON.parse(localStorage.getItem('chatMessages')) || [];
+
+    if(messages.length === 0){
+      messagesContainer.innerHTML = `<div class="text-center text-muted p-5">No messages yet. Start the conversation!</div>`;
+      return;
+    }
+
+    messagesContainer.innerHTML = messages.map(msg => {
+      const isSent = msg.email === loggedInUser.email;
+      const msgClass = isSent ? 'sent' : 'received';
+      const userDisplay = isSent ? 'You' : msg.username;
+      const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `
+        <div class="message ${msgClass}">
+            <div class="meta">${userDisplay} <span class="fw-normal opacity-75 small">${time}</span></div>
+            <div class="text">${msg.text}</div>
+        </div>`;
+    }).join('');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  };
+
+  const sendChatMessage = (e) => {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    if (input.value.trim()) {
+      const messages = JSON.parse(localStorage.getItem('chatMessages')) || [];
+      messages.push({
+        username: loggedInUser.username,
+        email: loggedInUser.email,
+        text: input.value.trim(),
+        timestamp: new Date().toISOString()
+      });
+      localStorage.setItem('chatMessages', JSON.stringify(messages));
+      loadChatMessages();
+      input.value = '';
+      input.focus();
+    }
+    
+  };
+
+  const handleLogout = () => {
+    sessionStorage.clear();
+    window.location.href = 'login.html';
+  };
+
+  const setupEventListeners = () => {
+    el.logoutBtn.addEventListener('click', handleLogout);
+    el.searchInput.addEventListener("input", (e) => renderIcons(e.target.value.toLowerCase()));
+
+    let isExpanded = false;
+    el.expandBtn.addEventListener("click", () => {
+      isExpanded = !isExpanded;
+      el.miniSidebar.classList.toggle('hide', isExpanded);
+      el.subSidebar.classList.toggle('hide', isExpanded);
+      el.dragHandle.classList.toggle('hide', isExpanded);
+      el.mainContent.style.width = isExpanded ? "100%" : "auto";
+      el.expandBtn.innerHTML = isExpanded ? `<i class="bi bi-arrows-collapse"></i>` : `<i class="bi bi-arrows-fullscreen"></i>`;
+    });
+
+    let isDragging = false;
+    el.dragHandle.addEventListener("mousedown", () => {
+      isDragging = true;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      let newWidth = e.clientX - el.miniSidebar.offsetWidth;
+      if (newWidth < 150) newWidth = 150;
+      if (newWidth > 500) newWidth = 500;
+      el.subSidebar.style.width = `${newWidth}px`;
+    });
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
+    });
+
+    window.addEventListener('storage', (event) => {
+      // For group chat
+      if (event.key === 'chatMessages' && document.querySelector('.chat-container')) {
+        loadChatMessages();
+      }
+      // For private chat
+      if (event.key && event.key.startsWith('privateChat_') && document.querySelector('.private-chat-container')) {
+        // Find the other user from the chatKey
+        const chatKey = event.key;
+        const emails = chatKey.replace('privateChat_', '').split('_');
+        const otherEmail = emails.find(email => email !== loggedInUser.email);
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const otherUser = users.find(u => u.email === otherEmail);
+        if (otherUser) loadPrivateChatMessages(otherUser);
+      }
+    });
+  };
+
+  // --- INIT ---
+  const init = () => {
+    el.userName.textContent = loggedInUser.username;
+    renderIcons();
+    setupEventListeners();
+    if (el.miniSidebar.firstChild) el.miniSidebar.firstChild.click();
+
+    if (sessionStorage.getItem('login_success')) {
+      showToast(`Welcome back, ${loggedInUser.username}!`);
+      sessionStorage.removeItem('login_success');
+    }
+  };
+
+  init();
+});
